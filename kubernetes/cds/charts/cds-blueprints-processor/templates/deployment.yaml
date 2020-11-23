@@ -1,0 +1,206 @@
+# Copyright (c) 2019 IBM, Bell Canada
+# Copyright (c) 2020 Samsung Electronics
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ include "common.fullname" . }}
+  namespace: {{ include "common.namespace" . }}
+  labels:
+    app: {{ include "common.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ include "common.release" . }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # This allow a new pod to be ready before terminating the old one
+      # causing no downtime when replicas is set to 1
+      maxUnavailable: 0
+
+      # maxSurge to 1 is very important for the hazelcast integration
+      # we only want one pod at a time to restart not multiple
+      # and break the hazelcast cluster. We should not use % maxSurge value
+      # ref : https://hazelcast.com/blog/rolling-upgrade-hazelcast-imdg-on-kubernetes/
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: {{ include "common.name" . }}
+        release: {{ include "common.release" . }}
+    spec:
+      initContainers:
+      - command:
+        - sh
+        args:
+        - -c
+        - "cd /config-input && for PFILE in `ls -1 .`; do envsubst '${CDS_DB_USERNAME},${CDS_DB_PASSWORD},${SDNC_DB_USERNAME},${SDNC_DB_PASSWORD}' <${PFILE} >/config/${PFILE}; done"
+        env:
+        - name: CDS_DB_USERNAME
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "cds-db-user-creds" "key" "login") | indent 10}}
+        - name: CDS_DB_PASSWORD
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "cds-db-user-creds" "key" "password") | indent 10}}
+        - name: SDNC_DB_USERNAME
+          value: root
+        - name: SDNC_DB_PASSWORD
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "sdnc-db-root-pass" "key" "password") | indent 10}}
+        volumeMounts:
+        - mountPath: /config-input/application.properties
+          name: {{ include "common.fullname" . }}-config
+          subPath: application.properties
+        - mountPath: /config
+          name: processed-config
+        image: "{{ .Values.global.envsubstImage }}"
+        imagePullPolicy: {{ .Values.global.pullPolicy | default .Values.pullPolicy }}
+        name: {{ include "common.name" . }}-update-config
+
+      - command:
+        - /root/ready.py
+        args:
+        - --container-name
+        - cds-db
+        {{- if .Values.dmaapEnabled  }}
+        - --container-name
+        - message-router
+        {{ end }}
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        image: "{{ .Values.global.readinessRepository }}/{{ .Values.global.readinessImage }}"
+        imagePullPolicy: {{ .Values.global.pullPolicy | default .Values.pullPolicy }}
+        name: {{ include "common.name" . }}-readiness
+      - name: fix-permission
+        command:
+        - chown
+        - -R
+        - 1000:1000
+        - /opt/app/onap/blueprints/deploy
+        image: busybox:latest
+        imagePullPolicy: {{ .Values.global.pullPolicy | default .Values.pullPolicy }}
+        volumeMounts:
+        - mountPath: {{ .Values.persistence.deployedBlueprint }}
+          name: {{ include "common.fullname" . }}-blueprints
+      containers:
+        - name: {{ include "common.name" . }}
+          image: "{{ include "common.repository" . }}/{{ .Values.image }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy | default .Values.pullPolicy }}
+          env:
+          - name: APP_CONFIG_HOME
+            value: {{ .Values.config.appConfigDir }}
+          - name: USE_SCRIPT_COMPILE_CACHE
+            value: {{ .Values.config.useScriptCompileCache | quote }}
+          # Cluster should only be enabled when replicaCount is more than 2 and useScriptCompileCache is set to false otherwise it won't work properly
+          - name: CLUSTER_ENABLED
+            value: {{ if and (gt (int (.Values.replicaCount)) 2) (not .Values.config.useScriptCompileCache) }} {{ .Values.cluster.enabled | quote }} {{ else }} "false" {{ end }}
+          - name: CLUSTER_ID
+            value: {{ .Values.cluster.clusterName }}
+          - name: CLUSTER_NODE_ID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: CLUSTER_CONFIG_FILE
+            value: {{ .Values.config.appConfigDir }}/hazelcast.yaml
+          ports:
+          - containerPort: {{ .Values.service.http.internalPort }}
+          - containerPort: {{ .Values.service.grpc.internalPort }}
+          - containerPort: {{ .Values.service.cluster.internalPort }}
+          # disable liveness probe when breakpoints set in debugger
+          # so K8s doesn't restart unresponsive container
+          {{ if .Values.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /api/v1/execution-service/health-check
+              port: {{ .Values.service.http.internalPort }}
+              httpHeaders:
+              - name: Authorization
+                value: Basic Y2NzZGthcHBzOmNjc2RrYXBwcw==
+            initialDelaySeconds: {{ .Values.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.liveness.timeoutSeconds }}
+          {{ end }}
+          readinessProbe:
+            httpGet:
+              path: /api/v1/execution-service/health-check
+              port: {{ .Values.service.http.internalPort }}
+              httpHeaders:
+              - name: Authorization
+                value: Basic Y2NzZGthcHBzOmNjc2RrYXBwcw==
+            initialDelaySeconds: {{ .Values.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.readiness.timeoutSeconds }}
+          volumeMounts:
+          - mountPath: /etc/localtime
+            name: localtime
+            readOnly: true
+          - mountPath: {{ .Values.config.appConfigDir }}/application.properties
+            name: processed-config
+            subPath: application.properties
+          - mountPath: {{ .Values.config.appConfigDir }}/error-messages_en.properties
+            name: {{ include "common.fullname" . }}-config
+            subPath: error-messages_en.properties
+          - mountPath: {{ .Values.config.appConfigDir }}/logback.xml
+            name: {{ include "common.fullname" . }}-config
+            subPath: logback.xml
+          - mountPath: {{ .Values.config.appConfigDir }}/hazelcast.yaml
+            name: {{ include "common.fullname" . }}-config
+            subPath: hazelcast.yaml
+
+          - mountPath: {{ .Values.config.appConfigDir }}/ONAP_RootCA.cer
+            name: {{ include "common.fullname" . }}-config
+            subPath: ONAP_RootCA.cer
+
+          - mountPath: {{ .Values.persistence.deployedBlueprint }}
+            name: {{ include "common.fullname" . }}-blueprints
+          resources:
+{{ include "common.resources" . | indent 12 }}
+        {{- if .Values.nodeSelector }}
+        nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 10 }}
+        {{- end -}}
+        {{- if .Values.affinity }}
+        affinity:
+{{ toYaml .Values.affinity | indent 10 }}
+        {{- end }}
+      volumes:
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+        - name: {{ include "common.fullname" . }}-config
+          configMap:
+            name: {{ include "common.fullname" . }}-configmap
+            items:
+            - key: application.properties
+              path: application.properties
+            - key: error-messages_en.properties
+              path: error-messages_en.properties
+            - key: logback.xml
+              path: logback.xml
+            - key: hazelcast.yaml
+              path: hazelcast.yaml
+            - key: ONAP_RootCA.cer
+              path: ONAP_RootCA.cer
+        - name: {{ include "common.fullname" . }}-blueprints
+          persistentVolumeClaim:
+            claimName: {{ include "common.release" . }}-cds-blueprints
+        - name: processed-config
+          emptyDir:
+            medium: Memory
+      imagePullSecrets:
+      - name: "{{ include "common.namespace" . }}-docker-registry-key"

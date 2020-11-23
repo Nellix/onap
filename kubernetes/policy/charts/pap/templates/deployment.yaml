@@ -1,0 +1,120 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ include "common.fullname" . }}
+  namespace: {{ include "common.namespace" . }}
+  labels:
+    app: {{ include "common.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ include "common.release" . }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "common.name" . }}
+        release: {{ include "common.release" . }}
+    spec:
+      initContainers:
+      - command:
+        - /root/ready.py
+        args:
+        - --container-name
+        - {{ .Values.global.mariadb.service.name }}
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        image: "{{ .Values.global.readinessRepository }}/{{ .Values.global.readinessImage }}"
+        imagePullPolicy: {{ .Values.global.pullPolicy | default .Values.pullPolicy }}
+        name: {{ include "common.name" . }}-readiness
+
+      - command:
+        - sh
+        args:
+        - -c
+        - "export SQL_PASSWORD_BASE64=`echo -n ${SQL_PASSWORD} | base64`; cd /config-input && for PFILE in `ls -1 .`; do envsubst <${PFILE} >/config/${PFILE}; done"
+        env:
+        - name: SQL_USER
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "db-secret" "key" "login") | indent 10 }}
+        - name: SQL_PASSWORD
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "db-secret" "key" "password") | indent 10 }}
+        - name: RESTSERVER_USER
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "restserver-secret" "key" "login") | indent 10 }}
+        - name: RESTSERVER_PASSWORD
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "restserver-secret" "key" "password") | indent 10 }}
+        - name: API_USER
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "api-secret" "key" "login") | indent 10 }}
+        - name: API_PASSWORD
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "api-secret" "key" "password") | indent 10 }}
+        - name: DISTRIBUTION_USER
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "distribution-secret" "key" "login") | indent 10 }}
+        - name: DISTRIBUTION_PASSWORD
+          {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "distribution-secret" "key" "password") | indent 10 }}
+        volumeMounts:
+        - mountPath: /config-input
+          name: papconfig
+        - mountPath: /config
+          name: papconfig-processed
+        image: "{{ .Values.global.envsubstImage }}"
+        imagePullPolicy: {{ .Values.global.pullPolicy | default .Values.pullPolicy }}
+        name: {{ include "common.name" . }}-update-config
+      containers:
+        - name: {{ include "common.name" . }}
+          image: "{{ include "common.repository" . }}/{{ .Values.image }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy | default .Values.pullPolicy }}
+          command: ["/opt/app/policy/pap/bin/policy-pap.sh"]
+          args: ["/opt/app/policy/pap/etc/mounted/config.json"]
+          env:
+          - name: KEYSTORE_PASSWD
+            {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "keystore-password" "key" "password") | indent 12 }}
+          - name: TRUSTSTORE_PASSWD
+            {{- include "common.secret.envFromSecretFast" (dict "global" . "uid" "truststore-password" "key" "password") | indent 12 }}
+          ports:
+          - containerPort: {{ .Values.service.internalPort }}
+          # disable liveness probe when breakpoints set in debugger
+          # so K8s doesn't restart unresponsive container
+          {{- if eq .Values.liveness.enabled true }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.service.internalPort }}
+            initialDelaySeconds: {{ .Values.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.liveness.periodSeconds }}
+          {{ end -}}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.service.internalPort }}
+            initialDelaySeconds: {{ .Values.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readiness.periodSeconds }}
+          volumeMounts:
+          - mountPath: /etc/localtime
+            name: localtime
+            readOnly: true
+          - mountPath: /opt/app/policy/pap/etc/mounted
+            name: papconfig-processed
+          resources:
+{{ include "common.resources" . | indent 12 }}
+        {{- if .Values.nodeSelector }}
+        nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 10 }}
+        {{- end -}}
+        {{- if .Values.affinity }}
+        affinity:
+{{ toYaml .Values.affinity | indent 10 }}
+        {{- end }}
+      volumes:
+        - name: localtime
+          hostPath:
+             path: /etc/localtime
+        - name: papconfig
+          configMap:
+            name: {{ include "common.fullname" . }}-configmap
+            defaultMode: 0755
+        - name: papconfig-processed
+          emptyDir:
+            medium: Memory
+      imagePullSecrets:
+      - name: "{{ include "common.namespace" . }}-docker-registry-key"

@@ -1,0 +1,138 @@
+# Copyright © 2017 Amdocs, Bell Canada
+# Modifications Copyright © 2018, 2020 AT&T
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#################################################################
+# Global configuration defaults.
+#################################################################
+global:
+  env:
+    tomcatDir: "/usr/local/tomcat"
+  nodePortPrefix: 302
+  readinessRepository: oomk8s
+  readinessImage: readiness-check:2.0.0
+  loggingRepository: docker.elastic.co
+  loggingImage: beats/filebeat:5.5.0
+  persistence: {}
+  #AAF service
+  aafEnabled: true
+
+#################################################################
+# Application configuration defaults.
+#################################################################
+
+# application image
+repository: nexus3.onap.org:10001
+image: onap/portal-sdk:3.2.0
+pullPolicy: Always
+
+#AAF local config
+aafURL: https://aaf-service:8100/authz/
+certInitializer:
+  nameOverride: portal-sdk-cert-initializer
+  aafDeployFqi: deployer@people.osaaf.org
+  aafDeployPass: demo123456!
+  fqdn: portal
+  fqi: portal@portal.onap.org
+  public_fqdn: portal.onap.org
+  cadi_latitude: "38.0"
+  cadi_longitude: "-72.0"
+  credsPath: /opt/app/osaaf/local
+  app_ns: org.osaaf.aaf
+  permission_user: 1000
+  permission_group: 999
+  keystoreFile: "org.onap.portal.p12"
+  truststoreFile: "org.onap.portal.trust.jks"
+  aaf_add_config: >
+    /opt/app/aaf_config/bin/agent.sh;
+    /opt/app/aaf_config/bin/agent.sh local showpass \
+    {{.Values.fqi}} {{ .Values.fqdn }} > {{ .Values.credsPath }}/mycreds.prop
+
+# flag to enable debugging - application support required
+debugEnabled: false
+
+# default number of instances
+replicaCount: 1
+
+nodeSelector: {}
+
+affinity: {}
+
+# probe configuration parameters
+liveness:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  # necessary to disable liveness probe when setting breakpoints
+  # in debugger so K8s doesn't restart unresponsive container
+  enabled: true
+
+readiness:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+service:
+  type: NodePort
+  name: portal-sdk
+  portName: portal-sdk
+  internalPort: 8443
+  externalPort: 8443
+  nodePort: 12
+
+mariadb:
+  service:
+    name: portal-db
+widget:
+  service:
+    name: portal-widget
+cassandra:
+  service:
+    name: portal-cassandra
+  config:
+    cassandraUsername: root
+    cassandraPassword: Aa123456
+zookeeper:
+  service:
+    name: portal-zookeeper
+messageRouter:
+  service:
+    name: message-router
+
+ingress:
+  enabled: false
+  service:
+    - baseaddr: portal-sdk
+      name: "portal-sdk"
+      port: 8443
+  config:
+    ssl: "redirect"
+
+# Resource Limit flavor -By Default using small
+flavor: small
+# Segregation for Different environment (Small and Large)
+resources:
+  small:
+    limits:
+      cpu: 600m
+      memory: 1.6Gi
+    requests:
+      cpu: 10m
+      memory: 1.3Gi
+  large:
+    limits:
+      cpu: 8
+      memory: 20Gi
+    requests:
+      cpu: 4
+      memory: 10Gi
+  unlimited: {}

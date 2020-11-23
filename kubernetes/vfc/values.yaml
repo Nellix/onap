@@ -1,0 +1,88 @@
+# Copyright © 2017 Amdocs, Bell Canada
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+global:
+  config:
+    ssl_enabled: false
+    msbprotocol: https
+    msbServiceName: msb-iag
+    msbPort: 443
+    redisServiceName: vfc-redis
+    redisPort: 6379
+# Becaue now oom can register the microservice to msb automatically,
+# If it is set to false, vfc contanier will not register again, if it is
+# set to true, vfc will register by itself.
+# we use this flag to determine who is responbile for serice registeration
+# and it can reduce duplicate registration.
+    reg_to_msb_when_start: False
+    mariadb_admin: root
+  persistence:
+    mountPath: /dockerdata-nfs
+
+#################################################################
+# Secrets metaconfig
+#################################################################
+secrets:
+  - uid: "db-root-pass"
+    name: &dbRootPassSecret '{{ include "common.release" . }}-vfc-db-root-pass'
+    type: password
+    password: '{{ .Values.config.mariadbRootPassword }}'
+
+# application configuration
+config:
+  logstashServiceName: log-ls
+  logstashPort: 5044
+
+mariadb-galera:
+  config:
+    mariadbRootPasswordExternalSecret: *dbRootPassSecret
+  nameOverride: vfc-mariadb
+  service:
+    name: vfc-mariadb
+    portName: vfc-mariadb
+  nfsprovisionerPrefix: vfc
+  persistence:
+    mountSubPath: vfc/data
+    enabled: true
+  disableNfsProvisioner: true
+
+db: &dbConfig
+  mariadbService: vfc-mariadb
+  mariadbPort: 3306
+  mariadbRootPasswordExternalSecret: *dbRootPassSecret
+
+vfc-nslcm:
+  config:
+    << : *dbConfig
+
+vfc-vnflcm:
+  config:
+    << : *dbConfig
+
+vfc-vnfmgr:
+  config:
+    << : *dbConfig
+
+vfc-vnfres:
+  config:
+    << : *dbConfig
+
+# sub-chart configuration
+vfc-workflow:
+  service:
+    externalPort: 10550
+
+vfc-workflow-engine:
+  config:
+    workflowPort: 10550

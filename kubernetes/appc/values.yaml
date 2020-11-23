@@ -1,0 +1,242 @@
+# Copyright © 2017 Amdocs, Bell Canada
+# Modifications Copyright © 2018 AT&T
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#################################################################
+# Global configuration defaults.
+#################################################################
+global:
+  nodePortPrefix: 302
+  readinessRepository: oomk8s
+  readinessImage: readiness-check:2.0.0
+  centralizedLoggingEnabled: false
+  loggingRepository: docker.elastic.co
+  loggingImage: beats/filebeat:5.5.0
+  # envsusbt
+  envsubstImage: dibi/envsubst
+  persistence:
+    mountPath: /dockerdata-nfs
+
+#################################################################
+# Secrets metaconfig
+#################################################################
+secrets:
+  - uid: "db-root-pass"
+    name: '{{ include "common.release" . }}-appc-db-root-pass'
+    externalSecret: '{{ .Values.config.dbRootPassExternalSecret }}'
+    type: password
+    password: '{{ .Values.config.dbRootPass }}'
+  - uid: 'appcdb-user-creds'
+    name: '{{ include "common.release" . }}-appcdb-user-creds'
+    type: basicAuth
+    externalSecret: '{{ tpl (default "" .Values.config.appcdb.userCredentialsExternalSecret) . }}'
+    login: '{{ .Values.config.appcdb.userName }}'
+    password: '{{ .Values.config.appcdb.password }}'
+  - uid: 'sdncdb-user-creds'
+    name: '{{ include "common.release" . }}-sdncdb-user-creds'
+    type: basicAuth
+    externalSecret: '{{ tpl (default "" .Values.config.sdncdb.userCredentialsExternalSecret) . }}'
+    login: '{{ .Values.config.sdncdb.userName }}'
+    password: '{{ .Values.config.sdncdb.password }}'
+
+
+#################################################################
+# Application configuration defaults.
+#################################################################
+flavor: small
+# application image
+repository: nexus3.onap.org:10001
+image: onap/appc-image:1.7.2
+pullPolicy: Always
+
+# flag to enable debugging - application support required
+debugEnabled: false
+
+# log configuration
+log:
+  path: /var/log/onap
+
+# application configuration
+config:
+#  dbRootPassExternalSecret: some secret
+#  dbRootPass: password
+  appcdb:
+    # Warning: changing this config option may not work.
+    # It seems that the DB name is hardcoded.
+    dbName: appcctl
+    userName: appcctl
+    # password: appcctl
+    # userCredsExternalSecret: some secret
+  sdncdb:
+    # Warning: changing this config option may not work.
+    # It seems that the DB name is hardcoded.
+    dbName: sdnctl
+    userName: sdnctl
+    # password: gamma
+    # userCredsExternalSecret: some secret
+  odlUid: 100
+  odlGid: 101
+  ansibleServiceName: appc-ansible-server
+  ansiblePort: 8000
+  mariadbGaleraSVCName: appc-dbhost
+  mariadbGaleraContName: appc-db
+  enableAAF: true
+  enableClustering: false
+  configDir: /opt/onap/appc/data/properties
+  dmaapTopic: SUCCESS
+  dmaapTopicEnv: AUTO
+  logstashServiceName: log-ls
+  logstashPort: 5044
+  odlPassword: Kp8bJ4SXszM0WXlhak3eHlcse2gAw84vaoGGmJvUy2U
+  openStackType: OpenStackProvider
+  openStackName: OpenStack
+  openStackKeyStoneUrl: http://localhost:8181/apidoc/explorer/index.html
+  openStackServiceTenantName: default
+  openStackDomain: default
+  openStackUserName: admin
+  openStackEncryptedPassword: enc:LDEbHEAvTF1R
+  odlUser: admin
+  dmaapServiceUrl: http://localhost:8080/publish
+  dmaapServiceUser: appc
+  dmaapServicePassword: onapappc
+
+appc-ansible-server:
+  service:
+    name: appc-ansible-server
+    internalPort: 8000
+  config:
+    mysqlServiceName: appc-dbhost
+
+mariadb-galera:
+  nameOverride: appc-db
+  config:
+    mariadbRootPasswordExternalSecret: '{{ include "common.release" . }}-appc-db-root-pass'
+  service:
+    name: appc-dbhost
+    portName: appc-dbhost
+  nfsprovisionerPrefix: appc
+  sdnctlPrefix: appc
+  persistence:
+    mountSubPath: appc/data
+    enabled: true
+  disableNfsProvisioner: true
+
+dgbuilder:
+  nameOverride: appc-dgbuilder
+  config:
+    db:
+      rootPasswordExternalSecret: '{{ include "common.release" . }}-appc-db-root-pass'
+      userCredentialsExternalSecret: '{{ include "common.release" . }}-sdncdb-user-creds'
+    dbPodName: appc-db
+    dbServiceName: appc-dbhost
+  service:
+    name: appc-dgbuilder
+
+  ingress:
+    enabled: false
+    service:
+      - baseaddr: "appc-dgbuilder"
+        name: "appc-dgbuilder"
+        port: 3000
+    config:
+      ssl: "redirect"
+
+#passing value to cdt chart. value of nodePort3 will be same as appc.service.nodePort3.
+appc-cdt:
+  nodePort3: 11
+# default number of instances
+replicaCount: 1
+
+nodeSelector: {}
+
+affinity: {}
+
+# probe configuration parameters
+liveness:
+  initialDelaySeconds: 300
+  periodSeconds: 60
+  # necessary to disable liveness probe when setting breakpoints
+  # in debugger so K8s doesn't restart unresponsive container
+  enabled: true
+
+readiness:
+  initialDelaySeconds: 300
+  periodSeconds: 60
+
+service:
+  type: NodePort
+  name: appc
+  portName: appc
+
+  internalPort: 8443
+  externalPort: 8443
+  nodePort: 30
+
+  externalPort2: 1830
+  nodePort2: 31
+  clusterPort: 2550
+
+  internalPort3: 9191
+  externalPort3: 9090
+  nodePort3: 11
+
+## Persist data to a persitent volume
+persistence:
+  enabled: true
+
+  ## A manually managed Persistent Volume and Claim
+  ## Requires persistence.enabled: true
+  ## If defined, PVC must be created manually before volume will be bound
+  # existingClaim:
+  volumeReclaimPolicy: Retain
+
+  ## database data Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  mountPath: /dockerdata-nfs
+  mountSubPath: appc/mdsal
+  mdsalPath: /opt/opendaylight/current/daexim
+
+ingress:
+  enabled: false
+  service:
+    - baseaddr: "appc.api"
+      name: "appc"
+      port: 8443
+  config:
+    ssl: "redirect"
+
+# Configure resource requests and limits
+# ref: http://kubernetes.io/docs/user-guide/compute-resources/
+resources:
+  small:
+    limits:
+      cpu: 2
+      memory: 4Gi
+    requests:
+      cpu: 1
+      memory: 2Gi
+  large:
+    limits:
+      cpu: 4
+      memory: 8Gi
+    requests:
+      cpu: 2
+      memory: 4Gi
+  unlimited: {}

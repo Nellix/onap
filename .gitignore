@@ -1,0 +1,27 @@
+# Unit tests
+__snapshot__
+
+# Application
+kubernetes/config/onap-parameters.yaml
+kubernetes/dist/*
+requirements.lock
+**/charts/*.tgz
+*.orig
+
+# AAI Schema
+**/schema/*
+
+
+# Eclipse
+.classpath
+.factorypath
+.project
+.pydevproject
+.settings/
+
+# IntelliJ
+.idea/*
+*.iml
+
+# Mac OS
+*DS_Store*

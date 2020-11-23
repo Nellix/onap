@@ -1,0 +1,17 @@
+server:
+  port: {{ index .Values.containerPort }}
+  tomcat:
+    max-threads: 50
+ssl-enable: false
+camunda:
+  rest:
+    api:
+      url: http://so-bpmn-infra.{{ include "common.namespace" . }}:8081/sobpmnengine/engine/
+      engine: default
+      auth: Basic YXBpaEJwbW46cGFzc3dvcmQxJA==
+mso:
+  database:
+    rest:
+      api:
+        url: http://so-request-db-adapter.{{ include "common.namespace" . }}:8083/infraActiveRequests/
+        auth: Basic YnBlbDpwYXNzd29yZDEk

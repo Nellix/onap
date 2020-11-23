@@ -1,0 +1,143 @@
+# Copyright © 2017 Amdocs, Bell Canada
+# Copyright © 2020 Samsung Electronics
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for vid.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+global:
+  nodePortPrefix: 302
+  readinessRepository: oomk8s
+  readinessImage: readiness-check:2.0.2
+  loggingRepository: docker.elastic.co
+  loggingImage: beats/filebeat:5.5.0
+
+#################################################################
+# Secrets metaconfig
+#################################################################
+secrets:
+  - uid: vid-db-user-secret
+    name: '{{ include "common.release" . }}-vid-db-user-secret'
+    type: basicAuth
+    externalSecret: '{{ tpl (default "" .Values.config.db.userCredentialsExternalSecret) . }}'
+    login: '{{ .Values.config.db.userName }}'
+    password: '{{ .Values.config.db.userPassword }}'
+
+subChartsOnly:
+  enabled: true
+
+# application image
+repository: nexus3.onap.org:10001
+image: onap/vid:6.0.4
+pullPolicy: Always
+
+# mariadb image for initializing
+mariadb_image: library/mariadb:10
+
+# application configuration
+config:
+  db:
+    userName: vidadmin
+#    userCredentialsExternalSecret: some secret
+#    userPassword: password
+  vidkeystorepassword: 'F:.\,csU\&ew8\;tdVitnfo\}O\!g'
+  asdcclientrestauth: "Basic dmlkOktwOGJKNFNYc3pNMFdYbGhhazNlSGxjc2UyZ0F3ODR2YW9HR21KdlV5MlU="
+  asdcclientrestport: "8443"
+  vidaaiport: "8443"
+  onapport: "30225"
+  onapportrest: "8443"
+  portalhost: "portal.api.simpledemo.onap.org"
+  msoport: "8080"
+  vidmsopass: OBF:1ih71i271vny1yf41ymf1ylz1yf21vn41hzj1icz
+  msodme2serverurl: http://localhost:8081
+  vidcontactuslink: https://todo_contact_us_link.com
+  vidmysqlmaxconnections: "5"
+  logstashServiceName: log-ls
+  logstashPort: 5044
+  roleaccesscentralized: remote
+
+mariadb-galera:
+  config:
+    userCredentialsExternalSecret: '{{ include "common.release" . }}-vid-db-user-secret'
+    mysqlDatabase: vid_openecomp_epsdk
+  nameOverride: vid-galera
+  service:
+    name: vid-galera
+    portName: mysql-vid
+    internalPort: "3306"
+  replicaCount: 3
+  persistence:
+    enabled: true
+    mountSubPath: vid/maria/data
+  externalConfig: |-
+    [mysqld]
+    lower_case_table_names = 1
+
+# default number of instances
+replicaCount: 1
+
+nodeSelector: {}
+
+affinity: {}
+
+# probe configuration parameters
+liveness:
+  initialDelaySeconds: 120
+  periodSeconds: 10
+  # necessary to disable liveness probe when setting breakpoints
+  # in debugger so K8s doesn't restart unresponsive container
+  enabled: true
+
+readiness:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+service:
+  type: NodePort
+  name: vid
+  portName: vid
+  externalPort: 8443
+  internalPort: 8443
+  nodePort: "00"
+  externalHttpPort: 8080
+  internalHttpPort: 8080
+
+ingress:
+  enabled: false
+  service:
+       - baseaddr: "vid.api"
+         name: "vid-http"
+         port: 8443
+  config:
+       ssl: "redirect"
+
+# Resource Limit flavor -By Default using small
+flavor: small
+# Segregation for Different environment (Small and Large)
+resources:
+  small:
+    limits:
+      cpu: 200m
+      memory: 2Gi
+    requests:
+      cpu: 100m
+      memory: 1Gi
+  large:
+    limits:
+      cpu: 400m
+      memory: 4Gi
+    requests:
+      cpu: 200m
+      memory: 2Gi
+  unlimited: {}

@@ -1,0 +1,50 @@
+# Copyright © 2017 Amdocs, Bell Canada
+# Modifications Copyright © 2018 AT&T
+# Modifications Copyright © 2020 Orange
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+dependencies:
+  - name: aaf-cass
+    version: ~6.x-0
+    repository: 'file://components/aaf-cass'
+  - name: aaf-cert-service
+    version: ~6.x-0
+    repository: 'file://components/aaf-cert-service'
+  - name: aaf-cm
+    version: ~6.x-0
+    repository: 'file://components/aaf-cm'
+  - name: aaf-fs
+    version: ~6.x-0
+    repository: 'file://components/aaf-fs'
+  - name: aaf-gui
+    version: ~6.x-0
+    repository: 'file://components/aaf-gui'
+  - name: aaf-hello
+    version: ~6.x-0
+    repository: 'file://components/aaf-hello'
+  - name: aaf-locate
+    version: ~6.x-0
+    repository: 'file://components/aaf-locate'
+  - name: aaf-oauth
+    version: ~6.x-0
+    repository: 'file://components/aaf-oauth'
+  - name: aaf-service
+    version: ~6.x-0
+    repository: 'file://components/aaf-service'
+  - name: aaf-sms
+    version: ~6.x-0
+    repository: 'file://components/aaf-sms'
+  - name: aaf-sshsm
+    version: ~6.x-0
+    repository: 'file://components/aaf-sshsm'

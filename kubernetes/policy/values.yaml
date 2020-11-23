@@ -1,0 +1,183 @@
+# Copyright © 2017 Amdocs, Bell Canada
+# Modifications Copyright © 2018-2020 AT&T
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#################################################################
+# Global configuration defaults.
+#################################################################
+global:
+  nodePortPrefix: 302
+  readinessRepository: oomk8s
+  readinessImage: readiness-check:2.0.2
+  loggingRepository: docker.elastic.co
+  loggingImage: beats/filebeat:5.5.0
+  envsubstImage: dibi/envsubst
+  ubuntuImage: ubuntu:16.04
+  pdp:
+    nameOverride: pdp
+  pap:
+    nameOverride: pap
+  drools:
+    nameOverride: drools
+  brmwgw:
+    nameOverride: brmsgw
+  nexus:
+    nameOverride: nexus
+  mariadb:
+    # '&mariadbConfig' means we "store" the values for  later use in the file
+    # with '*mariadbConfig' pointer.
+    config: &mariadbConfig
+      mysqlDatabase: policyadmin
+    service: &mariadbService
+      name: policy-mariadb
+      portName: mysql-policy
+      internalPort: 3306
+
+#################################################################
+# Secrets metaconfig
+#################################################################
+secrets:
+  - uid: db-root-password
+    name: &dbRootPassSecretName '{{ include "common.release" . }}-policy-db-root-password'
+    type: password
+    externalSecret: '{{ ternary "" (tpl (default "" (index .Values "mariadb-galera" "config" "mariadbRootPasswordExternalSecret")) .) (hasSuffix "policy-db-root-password" (index .Values "mariadb-galera" "config" "mariadbRootPasswordExternalSecret"))}}'
+    password: '{{ (index .Values "mariadb-galera" "config" "mariadbRootPassword") }}'
+    policy: generate
+  - uid: db-secret
+    name: &dbSecretName '{{ include "common.release" . }}-policy-db-secret'
+    type: basicAuth
+    externalSecret: '{{ ternary "" (tpl (default "" (index .Values "mariadb-galera" "config" "userCredentialsExternalSecret")) .) (hasSuffix "policy-db-secret" (index .Values "mariadb-galera" "config" "userCredentialsExternalSecret"))}}'
+    login: '{{ index .Values "mariadb-galera" "config" "userName" }}'
+    password: '{{ index .Values "mariadb-galera" "config" "userPassword" }}'
+    passwordPolicy: generate
+
+#################################################################
+# Application configuration defaults.
+#################################################################
+# application image
+repository: nexus3.onap.org:10001
+image: onap/policy-pe:1.6.5
+mariadb_image: library/mariadb:10
+pullPolicy: Always
+
+subChartsOnly:
+  enabled: true
+
+db: &dbSecretsHook
+  credsExternalSecret: *dbSecretName
+
+pap:
+  nameOverride: pap
+  db: *dbSecretsHook
+pdp:
+  nameOverride: pdp
+  db: *dbSecretsHook
+drools:
+  nameOverride: drools
+  db: *dbSecretsHook
+brmsgw:
+  nameOverride: brmsgw
+  db: *dbSecretsHook
+policy-api:
+  db: *dbSecretsHook
+policy-xacml-pdp:
+  db: *dbSecretsHook
+
+nexus:
+  nameOverride: nexus
+
+# flag to enable debugging - application support required
+debugEnabled: false
+
+# application configuration
+config:
+  preloadPolicies: false
+  pdpPort: 8081
+
+# default number of instances
+replicaCount: 1
+
+nodeSelector: {}
+
+affinity: {}
+
+# probe configuration parameters
+liveness:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  # necessary to disable liveness probe when setting breakpoints
+  # in debugger so K8s doesn't restart unresponsive container
+  enabled: true
+
+readiness:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+service:
+  type: NodePort
+  name: pap
+  portName: pap
+  internalPort: 8443
+  externalPort: 8443
+  nodePort: 19
+  internalPort2: 9091
+  externalPort2: 9091
+  nodePort2: 18
+
+ingress:
+  enabled: false
+  service:
+    - baseaddr: "policy.api"
+      name: "pap"
+      port: 8443
+  config:
+    ssl: "redirect"
+
+mariadb-galera:
+  # mariadb-galera.config and global.mariadb.config must be equals
+  config:
+    <<: *mariadbConfig
+    userName: policy_user
+    mariadbRootPasswordExternalSecret: *dbRootPassSecretName
+    userCredentialsExternalSecret: *dbSecretName
+  nameOverride: policy-mariadb
+  # mariadb-galera.service and global.mariadb.service must be equals
+  service: *mariadbService
+  replicaCount: 1
+  persistence:
+    enabled: true
+    mountSubPath: policy/maria/data
+  externalConfig: |-
+    [mysqld]
+    lower_case_table_names = 1
+
+# Resource Limit flavor -By Default using small
+flavor: small
+# Segregation for Different environment (Small and Large)
+resources:
+  small:
+    limits:
+      cpu: 1
+      memory: 4Gi
+    requests:
+      cpu: 10m
+      memory: 1Gi
+  large:
+    limits:
+      cpu: 2
+      memory: 8Gi
+    requests:
+      cpu: 20m
+      memory: 2Gi
+  unlimited: {}
