@@ -20,6 +20,7 @@
 # These overrides will affect all helm charts (ie. applications)
 # that are listed below and are 'enabled'.
 #################################################################
+repository: 163.162.95.154:9000
 global:
   # Change to an unused port prefix range to prevent port conflicts
   # with other instances running within the same k8s cluster
@@ -44,33 +45,35 @@ global:
   # repository but ONLY if your repository mirrors all ONAP
   # docker images. This includes all images from dockerhub and
   # any other repository that hosts images for ONAP components.
-  #repository: nexus3.onap.org:10001
+  repository: 163.162.95.154:9000
   repositoryCred:
     user: docker
     password: docker
-  dockerHubRepository: docker.io
+  dockerHubRepository: 163.162.95.154:9000
 
   # readiness check
   readinessImage: onap/oom/readiness:3.0.1
+  #do not replace
 
   # curl image
   curlImage: curlimages/curl:7.69.1
+  #test not replaced
 
   # logging agent - temporary repo until images migrated to nexus3
-  loggingRepository: docker.elastic.co
+  loggingRepository: 163.162.95.154:9000
 
   # dockerHub main repository
-  dockerHubRepository: docker.io
+  dockerHubRepository: 163.162.95.154:9000
 
   # busybox repo and image
-  busyboxRepository: docker.io
+  busyboxRepository: 163.162.95.154:9000
   busyboxImage: busybox:1.30
 
   # kubeclt image
-  kubectlImage: "bitnami/kubectl:1.15"
+  kubectlImage: "163.162.95.154:9000/bitnami/kubectl:1.15"
 
   # image pull policy
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
   # default clusterName
   # {{ template "common.fullname" . }}.{{ template "common.namespace" . }}.svc.{{ .Values.global.clusterName }}
@@ -120,12 +123,13 @@ global:
   # Keep it enabled in production
   aafEnabled: true
   aafAgentImage: onap/aaf/aaf_agent:2.1.20
+  #do not rename with internal repo
 
   # Enabling CMPv2
-  cmpv2Enabled: true
+  cmpv2Enabled: false # fix dev-sdnc-0 no ssl handshake due to different CA
   platform:
     certServiceClient:
-      image: onap/org.onap.oom.platform.cert-service.oom-certservice-client:2.1.0
+      image: 163.162.95.154:9000/onap/org.onap.oom.platform.cert-service.oom-certservice-client:2.1.0 #replace with internal repo, only 1 strange occasion
       secret:
         name: oom-cert-service-client-tls-secret
         mountPath: /etc/onap/oom/certservice/certs/
@@ -200,11 +204,11 @@ global:
 # to customize the ONAP deployment.
 #################################################################
 aaf:
-  enabled: false
+  enabled: true
 aai:
-  enabled: false
+  enabled: true
 appc:
-  enabled: false
+  enabled: true
   config:
     openStackType: OpenStackProvider
     openStackName: OpenStack
@@ -214,71 +218,71 @@ appc:
     openStackUserName: admin
     openStackEncryptedPassword: admin
 cassandra:
-  enabled: false
+  enabled: true
 cds:
-  enabled: false
+  enabled: true
 clamp:
-  enabled: false
+  enabled: true
 cli:
-  enabled: false
+  enabled: true
 consul:
-  enabled: false
+  enabled: true
 # Today, "contrib" chart that hosting these components must also be enabled
 # in order to make it work. So `contrib.enabled` must have the same value than
 # addTestingComponents
 contrib:
   enabled: *testing
 dcaegen2:
-  enabled: false
+  enabled: true
 dcaemod:
-  enabled: false
+  enabled: true
 dmaap:
-  enabled: false
+  enabled: true
 esr:
-  enabled: false
+  enabled: true
 # Today, "logging" chart that perform the central part of logging must also be
 # enabled in order to make it work. So `logging.enabled` must have the same
 # value than centralizedLoggingEnabled
 log:
   enabled: *centralizedLogging
 sniro-emulator:
-  enabled: false
+  enabled: true
 oof:
-  enabled: false
+  enabled: true
 mariadb-galera:
-  enabled: false
+  enabled: true
 msb:
-  enabled: false
+  enabled: true
 multicloud:
-  enabled: false
+  enabled: true
 nbi:
-  enabled: false
+  enabled: true
   config:
     # openstack configuration
     openStackRegion: "Yolo"
     openStackVNFTenantId: "1234"
 policy:
-  enabled: false
+  enabled: true
 pomba:
-  enabled: false
+  enabled: true
 portal:
-  enabled: false
+  enabled: true
 robot:
-  enabled: false
+  enabled: true
   config:
     # openStackEncryptedPasswordHere should match the encrypted string used in SO and APPC and overridden per environment
     openStackEncryptedPasswordHere: "c124921a3a0efbe579782cde8227681e"
 sdc:
-  enabled: false
+  enabled: true
 sdnc:
-  enabled: false
+  enabled: true
 
   replicaCount: 1
 
   mysql:
     replicaCount: 1
 so:
-  enabled: false
+  enabled: true
 
   replicaCount: 1
 
@@ -309,19 +313,19 @@ so:
     config:
       mariadbRootPassword: password
 uui:
-  enabled: false
+  enabled: true
 vfc:
-  enabled: false
+  enabled: true
 vid:
-  enabled: false
+  enabled: true
 vnfsdk:
-  enabled: false
+  enabled: true
 modeling:
-  enabled: false
+  enabled: true
 platform:
-  enabled: false
+  enabled: true
 a1policymanagement:
-  enabled: false
+  enabled: true
 
 cert-wrapper:
   enabled: true
